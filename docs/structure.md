@@ -8,6 +8,7 @@ go-url-shortener/
 ├── internal/
 │   ├── domain/          # URL entity, validation rules — no external deps
 │   ├── ports/           # interfaces: URLRepository, Encoder, (Cache)
+│   ├── service/         # orchestrates domain + ports; composition point.
 │   └── adapters/        # concrete implementations of the ports
 │       ├── mongo/       # MongoURLRepository
 │       └── encoding/    # Base62Encoder (or whichever strategy is chosen)
