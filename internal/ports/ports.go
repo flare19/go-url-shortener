@@ -15,7 +15,7 @@ import (
 
 var (
 	ErrNotFound      = errors.New("ports: url not found")
-	ErrDuplicateCode = errors.New("ports: dulpicate code")
+	ErrDuplicateCode = errors.New("ports: duplicate code")
 )
 
 // URLRepository defines persistence operations needed by the domain.
