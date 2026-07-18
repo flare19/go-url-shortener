@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/flare19/go-url-shortener/internal/domain"
+	"github.com/flare19/go-url-shortener/internal/ports"
 )
+
+var _ ports.Cache = (*MemoryCache)(nil)
 
 // MemoryCache is an in-memory implementation of ports.Cache.
 // It is the v1 cache per ADR 0003 — safe for concurrent access,

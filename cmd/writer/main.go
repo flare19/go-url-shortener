@@ -24,18 +24,20 @@ import (
 )
 
 type config struct {
-	mongoURI   string
-	mongoDB    string
-	mongoColl  string
-	listenAddr string
+	mongoURI          string
+	mongoDB           string
+	mongoColl         string
+	listenAddr        string
+	redirectorBaseURL string
 }
 
 func loadConfig() config {
 	return config{
-		mongoURI:   mustEnv("MONGO_URI"),
-		mongoDB:    envOrDefault("MONGO_DB", "urlshortener"),
-		mongoColl:  envOrDefault("MONGO_COLLECTION", "urls"),
-		listenAddr: envOrDefault("LISTEN_ADDR", ":8080"),
+		mongoURI:          mustEnv("MONGO_URI"),
+		mongoDB:           envOrDefault("MONGO_DB", "urlshortener"),
+		mongoColl:         envOrDefault("MONGO_COLLECTION", "urls"),
+		listenAddr:        envOrDefault("LISTEN_ADDR", ":8080"),
+		redirectorBaseURL: envOrDefault("REDIRECTOR_BASE_URL", "http://localhost:8081"),
 	}
 }
 
@@ -76,7 +78,7 @@ func main() {
 	svc := service.NewURLService(repo, encoder, cache)
 
 	router := mux.NewRouter()
-	router.HandleFunc("/shorten", createHandler(svc)).Methods(http.MethodPost)
+	router.HandleFunc("/shorten", createHandler(svc, cfg.redirectorBaseURL)).Methods(http.MethodPost)
 	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
 
 	srv := &http.Server{
@@ -111,14 +113,13 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// cmd/writer/main.go  (additions — append below healthHandler, replace the placeholder comment)
-
 type createRequest struct {
 	LongURL string `json:"long_url"`
 }
 
 type createResponse struct {
 	Code      string `json:"code"`
+	ShortURL  string `json:"short_url"`
 	LongURL   string `json:"long_url"`
 	CreatedAt string `json:"created_at"`
 }
@@ -127,7 +128,7 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-func createHandler(svc *service.URLService) http.HandlerFunc {
+func createHandler(svc *service.URLService, redirectorBaseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req createRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -152,6 +153,7 @@ func createHandler(svc *service.URLService) http.HandlerFunc {
 
 		resp := createResponse{
 			Code:      u.Code,
+			ShortURL:  redirectorBaseURL + "/" + u.Code,
 			LongURL:   u.LongURL,
 			CreatedAt: u.CreatedAt.Format(time.RFC3339),
 		}

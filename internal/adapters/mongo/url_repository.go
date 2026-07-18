@@ -19,7 +19,7 @@ type mongoURLDoc struct {
 	Code       string    `bson:"code"`
 	LongURL    string    `bson:"long_url"`
 	CreatedAt  time.Time `bson:"created_at"`
-	HitCounter int64     `bson:"hit_count"` // was hit_counter — schema doc says hit_count
+	HitCounter int64     `bson:"hit_count"`
 }
 
 func toDoc(u *domain.URL) mongoURLDoc {
@@ -95,7 +95,7 @@ func (r *MongoURLRepository) IncrementHitsBatch(ctx context.Context, deltas map[
 	for code, delta := range deltas {
 		models = append(models, mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"code": code}).
-			SetUpdate(bson.M{"$inc": bson.M{"hit_count": delta}}), // was hit_counter
+			SetUpdate(bson.M{"$inc": bson.M{"hit_count": delta}}),
 		)
 	}
 

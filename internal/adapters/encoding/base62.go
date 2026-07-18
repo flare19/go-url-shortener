@@ -5,7 +5,11 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+
+	"github.com/flare19/go-url-shortener/internal/ports"
 )
+
+var _ ports.Encoder = (*RandomEncoder)(nil)
 
 // alphabet is the base62 character set used for generated codes.
 const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

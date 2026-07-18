@@ -85,7 +85,7 @@ func TestCreateHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := service.NewURLService(tt.repo, tt.encoder, nil) // cache nil — Create doesn't touch cache
-			handler := createHandler(svc)
+			handler := createHandler(svc, "http://localhost:8081")
 
 			req := httptest.NewRequest(http.MethodPost, "/shorten", bytes.NewBufferString(tt.body))
 			rec := httptest.NewRecorder()
@@ -103,6 +103,9 @@ func TestCreateHandler(t *testing.T) {
 				}
 				if resp.Code != "abc1234" {
 					t.Errorf("code = %q, want %q", resp.Code, "abc1234")
+				}
+				if resp.ShortURL != "http://localhost:8081/abc1234" {
+					t.Errorf("short_url = %q, want %q", resp.ShortURL, "http://localhost:8081/abc1234")
 				}
 				if resp.LongURL != "https://example.com" {
 					t.Errorf("long_url = %q, want %q", resp.LongURL, "https://example.com")

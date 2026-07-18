@@ -7,7 +7,7 @@ Create a short code for a long URL.
 **Request**
 ```json
 {
-  "url": "https://example.com/some/very/long/path"
+  "long_url": "https://example.com/some/very/long/path"
 }
 ```
 
@@ -15,7 +15,9 @@ Create a short code for a long URL.
 ```json
 {
   "code": "aZ3kT9",
-  "short_url": "http://localhost:PORT/aZ3kT9"
+  "short_url": "http://localhost:PORT/aZ3kT9",
+  "long_url": "https://example.com/some/very/long/path",
+  "created_at": "2026-07-18T13:29:08Z"
 }
 ```
 
