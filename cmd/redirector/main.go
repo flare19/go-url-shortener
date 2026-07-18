@@ -1,0 +1,114 @@
+// cmd/redirector/main.go
+package main
+
+import (
+	"context"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/flare19/go-url-shortener/internal/adapters/encoding"
+	"github.com/flare19/go-url-shortener/internal/adapters/memcache"
+	mongoadapter "github.com/flare19/go-url-shortener/internal/adapters/mongo"
+	"github.com/flare19/go-url-shortener/internal/config"
+	"github.com/flare19/go-url-shortener/internal/ports"
+	"github.com/flare19/go-url-shortener/internal/service"
+)
+
+type appConfig struct {
+	mongo      config.Mongo
+	listenAddr string
+}
+
+func loadConfig() appConfig {
+	return appConfig{
+		mongo:      config.LoadMongo(),
+		listenAddr: config.EnvOrDefault("LISTEN_ADDR", ":8081"),
+	}
+}
+
+func main() {
+	cfg := loadConfig()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.mongo.URI))
+	if err != nil {
+		log.Fatalf("mongo connect: %v", err)
+	}
+	if err := client.Ping(ctx, nil); err != nil {
+		log.Fatalf("mongo ping: %v", err)
+	}
+	coll := client.Database(cfg.mongo.DB).Collection(cfg.mongo.Collection)
+
+	repo := mongoadapter.NewMongoURLRepository(coll)
+	encoder := encoding.NewRandomEncoder() // redirector doesn't use this — see note below
+	cache := memcache.New()
+
+	svc := service.NewURLService(repo, encoder, cache)
+
+	router := mux.NewRouter()
+	router.HandleFunc("/{code}", redirectHandler(svc)).Methods(http.MethodGet)
+	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
+
+	srv := &http.Server{
+		Addr:         cfg.listenAddr,
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		log.Printf("redirector listening on %s", cfg.listenAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("shutdown error: %v", err)
+	}
+	if err := client.Disconnect(shutdownCtx); err != nil {
+		log.Printf("mongo disconnect error: %v", err)
+	}
+}
+
+func redirectHandler(svc *service.URLService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		code := vars["code"]
+
+		u, err := svc.Get(r.Context(), code)
+		if err != nil {
+			switch {
+			case errors.Is(err, ports.ErrNotFound):
+				http.NotFound(w, r)
+			default:
+				log.Printf("redirect error: %v", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		http.Redirect(w, r, u.LongURL, http.StatusFound)
+	}
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
