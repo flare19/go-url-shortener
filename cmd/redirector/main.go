@@ -71,6 +71,7 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/{code}", redirectHandler(svc, statsBuffer)).Methods(http.MethodGet)
+	router.HandleFunc("/{code}/stats", statsHandler(svc)).Methods(http.MethodGet)
 	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
 
 	srv := &http.Server{
