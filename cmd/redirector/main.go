@@ -20,6 +20,7 @@ import (
 	mongoadapter "github.com/flare19/go-url-shortener/internal/adapters/mongo"
 	"github.com/flare19/go-url-shortener/internal/adapters/stats"
 	"github.com/flare19/go-url-shortener/internal/config"
+	"github.com/flare19/go-url-shortener/internal/httpmiddleware"
 	"github.com/flare19/go-url-shortener/internal/ports"
 	"github.com/flare19/go-url-shortener/internal/service"
 	"github.com/joho/godotenv"
@@ -70,8 +71,9 @@ func main() {
 	statsBuffer.Start(context.Background())
 
 	router := mux.NewRouter()
+	router.Use(httpmiddleware.CORS(config.CORSAllowedOrigin()))
 	router.HandleFunc("/{code}", redirectHandler(svc, statsBuffer)).Methods(http.MethodGet)
-	router.HandleFunc("/{code}/stats", statsHandler(svc)).Methods(http.MethodGet)
+	router.HandleFunc("/{code}/stats", statsHandler(svc)).Methods(http.MethodGet, http.MethodOptions)
 	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
 
 	srv := &http.Server{

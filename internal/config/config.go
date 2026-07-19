@@ -48,3 +48,7 @@ func StatsFlushInterval() time.Duration {
 	}
 	return d
 }
+
+func CORSAllowedOrigin() string {
+	return EnvOrDefault("CORS_ALLOWED_ORIGIN", "http://localhost:5173")
+}

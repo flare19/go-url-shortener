@@ -20,8 +20,10 @@ import (
 	"github.com/flare19/go-url-shortener/internal/adapters/encoding"
 	"github.com/flare19/go-url-shortener/internal/adapters/memcache"
 	mongoadapter "github.com/flare19/go-url-shortener/internal/adapters/mongo"
+	"github.com/flare19/go-url-shortener/internal/config"
 	cfgpkg "github.com/flare19/go-url-shortener/internal/config"
 	"github.com/flare19/go-url-shortener/internal/domain"
+	"github.com/flare19/go-url-shortener/internal/httpmiddleware"
 	"github.com/flare19/go-url-shortener/internal/service"
 )
 
@@ -77,7 +79,8 @@ func main() {
 	svc := service.NewURLService(repo, encoder, cache)
 
 	router := mux.NewRouter()
-	router.HandleFunc("/shorten", createHandler(svc, cfg.redirectorBaseURL)).Methods(http.MethodPost)
+	router.Use(httpmiddleware.CORS(config.CORSAllowedOrigin()))
+	router.HandleFunc("/shorten", createHandler(svc, cfg.redirectorBaseURL)).Methods(http.MethodPost, http.MethodOptions)
 	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
 
 	srv := &http.Server{
