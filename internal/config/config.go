@@ -4,6 +4,7 @@ package config
 import (
 	"log"
 	"os"
+	"time"
 )
 
 type Mongo struct {
@@ -33,4 +34,17 @@ func EnvOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// StatsFlushInterval returns how often StatsBuffer should flush buffered
+// hit counts to the repository. Configurable via STATS_FLUSH_INTERVAL
+// (e.g. "5s", "1m"), defaults to 5 seconds if unset or unparseable.
+func StatsFlushInterval() time.Duration {
+	raw := EnvOrDefault("STATS_FLUSH_INTERVAL", "5s")
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Printf("config: invalid STATS_FLUSH_INTERVAL %q, defaulting to 5s: %v", raw, err)
+		return 5 * time.Second
+	}
+	return d
 }

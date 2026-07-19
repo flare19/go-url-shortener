@@ -18,6 +18,7 @@ import (
 	"github.com/flare19/go-url-shortener/internal/adapters/encoding"
 	"github.com/flare19/go-url-shortener/internal/adapters/memcache"
 	mongoadapter "github.com/flare19/go-url-shortener/internal/adapters/mongo"
+	"github.com/flare19/go-url-shortener/internal/adapters/stats"
 	"github.com/flare19/go-url-shortener/internal/config"
 	"github.com/flare19/go-url-shortener/internal/ports"
 	"github.com/flare19/go-url-shortener/internal/service"
@@ -56,8 +57,11 @@ func main() {
 
 	svc := service.NewURLService(repo, encoder, cache)
 
+	statsBuffer := stats.NewStatsBuffer(repo.IncrementHitsBatch, config.StatsFlushInterval())
+	statsBuffer.Start(context.Background())
+
 	router := mux.NewRouter()
-	router.HandleFunc("/{code}", redirectHandler(svc)).Methods(http.MethodGet)
+	router.HandleFunc("/{code}", redirectHandler(svc, statsBuffer)).Methods(http.MethodGet)
 	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
 
 	srv := &http.Server{
@@ -74,6 +78,9 @@ func main() {
 		}
 	}()
 
+	// execution continues here immediately — the goroutine runs concurrently,
+	// main() doesn't wait for it, it falls straight through to this line:
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
@@ -83,16 +90,16 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("shutdown error: %v", err)
 	}
+	statsBuffer.Stop(shutdownCtx)
 	if err := client.Disconnect(shutdownCtx); err != nil {
 		log.Printf("mongo disconnect error: %v", err)
 	}
 }
 
-func redirectHandler(svc *service.URLService) http.HandlerFunc {
+func redirectHandler(svc *service.URLService, sb *stats.StatsBuffer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		code := vars["code"]
-
 		u, err := svc.Get(r.Context(), code)
 		if err != nil {
 			switch {
@@ -104,7 +111,7 @@ func redirectHandler(svc *service.URLService) http.HandlerFunc {
 			}
 			return
 		}
-
+		sb.RecordHit(code)
 		http.Redirect(w, r, u.LongURL, http.StatusFound)
 	}
 }

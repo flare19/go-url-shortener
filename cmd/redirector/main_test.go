@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/flare19/go-url-shortener/internal/adapters/stats"
 	"github.com/flare19/go-url-shortener/internal/domain"
 	"github.com/flare19/go-url-shortener/internal/ports"
 	"github.com/flare19/go-url-shortener/internal/service"
@@ -70,6 +71,14 @@ func newTestRequest(code string) *http.Request {
 	return mux.SetURLVars(req, map[string]string{"code": code})
 }
 
+// add near the top, with the other helpers
+func newTestStatsBuffer() *stats.StatsBuffer {
+	return stats.NewStatsBuffer(
+		func(ctx context.Context, deltas map[string]int64) error { return nil },
+		time.Minute, // interval is irrelevant, Start() is never called in these tests
+	)
+}
+
 // --- tests ---
 
 func TestRedirectHandler_CacheHit(t *testing.T) {
@@ -78,7 +87,7 @@ func TestRedirectHandler_CacheHit(t *testing.T) {
 	cache := &stubCache{getURL: cachedURL, getHit: true}
 
 	svc := service.NewURLService(repo, nil, cache)
-	handler := redirectHandler(svc)
+	handler := redirectHandler(svc, newTestStatsBuffer())
 
 	req := newTestRequest("abc1234")
 	rec := httptest.NewRecorder()
@@ -101,7 +110,7 @@ func TestRedirectHandler_CacheMissFallbackToRepo(t *testing.T) {
 	cache := &stubCache{getHit: false}
 
 	svc := service.NewURLService(repo, nil, cache)
-	handler := redirectHandler(svc)
+	handler := redirectHandler(svc, newTestStatsBuffer())
 
 	req := newTestRequest("abc1234")
 	rec := httptest.NewRecorder()
@@ -129,7 +138,7 @@ func TestRedirectHandler_NotFound(t *testing.T) {
 	cache := &stubCache{getHit: false}
 
 	svc := service.NewURLService(repo, nil, cache)
-	handler := redirectHandler(svc)
+	handler := redirectHandler(svc, newTestStatsBuffer())
 
 	req := newTestRequest("doesnotexist")
 	rec := httptest.NewRecorder()
@@ -145,7 +154,7 @@ func TestRedirectHandler_RepoErrorMapsTo500(t *testing.T) {
 	cache := &stubCache{getHit: false}
 
 	svc := service.NewURLService(repo, nil, cache)
-	handler := redirectHandler(svc)
+	handler := redirectHandler(svc, newTestStatsBuffer())
 
 	req := newTestRequest("abc1234")
 	rec := httptest.NewRecorder()
@@ -153,6 +162,35 @@ func TestRedirectHandler_RepoErrorMapsTo500(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestRedirectHandler_RecordsHitOnSuccess(t *testing.T) {
+	repoURL := &domain.URL{Code: "abc1234", LongURL: "https://example.com/tracked"}
+	repo := &stubRepository{url: repoURL, err: nil}
+	cache := &stubCache{getHit: false}
+	svc := service.NewURLService(repo, nil, cache)
+
+	var captured map[string]int64
+	sb := stats.NewStatsBuffer(
+		func(ctx context.Context, deltas map[string]int64) error {
+			captured = deltas
+			return nil
+		},
+		time.Minute,
+	)
+
+	handler := redirectHandler(svc, sb)
+	req := newTestRequest("abc1234")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	// force a flush to inspect what was buffered — Start() was never called,
+	// so this is the only way to observe RecordHit's effect deterministically
+	sb.Stop(context.Background())
+
+	if captured["abc1234"] != 1 {
+		t.Errorf("captured hits for abc1234 = %d, want 1", captured["abc1234"])
 	}
 }
 
