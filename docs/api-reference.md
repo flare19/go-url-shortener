@@ -57,3 +57,6 @@ Return hit count for a short code.
 | Status | Condition |
 |--------|-----------|
 | 404    | code doesn't exist |
+
+Note: hit_count may lag actual traffic by up to ~65 seconds due to 
+buffered stats flushing and response caching. See ADR 0006.
