@@ -13,17 +13,19 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/flare19/go-url-shortener/internal/adapters/encoding"
 	"github.com/flare19/go-url-shortener/internal/adapters/memcache"
 	mongoadapter "github.com/flare19/go-url-shortener/internal/adapters/mongo"
+	cfgpkg "github.com/flare19/go-url-shortener/internal/config"
 	"github.com/flare19/go-url-shortener/internal/domain"
 	"github.com/flare19/go-url-shortener/internal/service"
 )
 
-type config struct {
+type appConfig struct {
 	mongoURI          string
 	mongoDB           string
 	mongoColl         string
@@ -31,32 +33,25 @@ type config struct {
 	redirectorBaseURL string
 }
 
-func loadConfig() config {
-	return config{
-		mongoURI:          mustEnv("MONGO_URI"),
-		mongoDB:           envOrDefault("MONGO_DB", "urlshortener"),
-		mongoColl:         envOrDefault("MONGO_COLLECTION", "urls"),
-		listenAddr:        envOrDefault("LISTEN_ADDR", ":8080"),
-		redirectorBaseURL: envOrDefault("REDIRECTOR_BASE_URL", "http://localhost:8081"),
+func loadConfig() appConfig {
+	return appConfig{
+		mongoURI:          cfgpkg.MustEnv("MONGO_URI"),
+		mongoDB:           cfgpkg.EnvOrDefault("MONGO_DB", "urlshortener"),
+		mongoColl:         cfgpkg.EnvOrDefault("MONGO_COLLECTION", "urls"),
+		listenAddr:        cfgpkg.EnvOrDefault("LISTEN_ADDR", ":8080"),
+		redirectorBaseURL: cfgpkg.EnvOrDefault("REDIRECTOR_BASE_URL", "http://localhost:8081"),
 	}
-}
-
-func mustEnv(key string) string {
-	v := os.Getenv(key)
-	if v == "" {
-		log.Fatalf("missing required env var: %s", key)
-	}
-	return v
-}
-
-func envOrDefault(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 func main() {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+	if err := godotenv.Load(".env." + env); err != nil {
+		log.Printf("no .env.%s file found, relying on real environment variables", env)
+	}
+
 	cfg := loadConfig()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

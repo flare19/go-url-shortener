@@ -22,6 +22,7 @@ import (
 	"github.com/flare19/go-url-shortener/internal/config"
 	"github.com/flare19/go-url-shortener/internal/ports"
 	"github.com/flare19/go-url-shortener/internal/service"
+	"github.com/joho/godotenv"
 )
 
 type appConfig struct {
@@ -37,6 +38,14 @@ func loadConfig() appConfig {
 }
 
 func main() {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+	if err := godotenv.Load(".env." + env); err != nil {
+		log.Printf("no .env.%s file found, relying on real environment variables", env)
+	}
+
 	cfg := loadConfig()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
