@@ -66,6 +66,10 @@ func main() {
 	}
 	coll := client.Database(cfg.mongoDB).Collection(cfg.mongoColl)
 
+	if err := mongoadapter.EnsureIndexes(ctx, coll); err != nil {
+		log.Fatalf("failed to ensure indexes: %v", err)
+	}
+
 	repo := mongoadapter.NewMongoURLRepository(coll)
 	encoder := encoding.NewRandomEncoder()
 	cache := memcache.New()
