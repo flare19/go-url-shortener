@@ -39,3 +39,25 @@ go.work.sum
 # build output if you build binaries locally
 /bin/
 /tmp/
+
+# Local state
+*.tfstate
+*.tfstate.*
+
+# Provider plugins & modules cache
+.terraform/
+.terraform.lock.hcl
+
+# Variable files that may hold secrets
+*.tfvars
+*.tfvars.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
