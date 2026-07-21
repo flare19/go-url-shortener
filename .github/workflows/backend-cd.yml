@@ -1,0 +1,96 @@
+name: Backend CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      writer-digest: ${{ steps.push.outputs.writer-digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push writer
+        run: |
+          docker build --platform linux/amd64 --provenance=false --sbom=false \
+            -t ghcr.io/flare19/go-url-shortener-writer:latest \
+            -f cmd/writer/Dockerfile .
+          docker push ghcr.io/flare19/go-url-shortener-writer:latest
+
+      - name: Build and push redirector
+        run: |
+          docker build --platform linux/amd64 --provenance=false --sbom=false \
+            -t ghcr.io/flare19/go-url-shortener-redirector:latest \
+            -f cmd/redirector/Dockerfile .
+          docker push ghcr.io/flare19/go-url-shortener-redirector:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Reallocate VMs
+        run: |
+          az vm start --resource-group urlshort-rg --name urlshort-writer
+          az vm start --resource-group urlshort-rg --name urlshort-redirector
+
+      - name: Wait for SSH to come up
+        run: sleep 45
+
+      - name: Deploy writer
+        uses: appleboy/ssh-action@v1
+        with:
+          host: urlshort-writer.duckdns.org
+          username: tejas
+          key: ${{ secrets.AZURE_SSH_PRIVATE_KEY }}
+          script: |
+            docker pull --platform linux/amd64 ghcr.io/flare19/go-url-shortener-writer:latest
+            docker stop writer || true
+            docker rm writer || true
+            docker run -d --name writer --network writer-net --env-file ~/.env.production \
+              -p 8080:8080 \
+              ghcr.io/flare19/go-url-shortener-writer:latest
+
+      - name: Deploy redirector
+        uses: appleboy/ssh-action@v1
+        with:
+          host: urlshort-redirector.duckdns.org
+          username: tejas
+          key: ${{ secrets.AZURE_SSH_PRIVATE_KEY }}
+          script: |
+            docker pull --platform linux/amd64 ghcr.io/flare19/go-url-shortener-redirector:latest
+            docker stop redirector || true
+            docker rm redirector || true
+            docker run -d --name redirector --network redirector-net --env-file ~/.env.production \
+              -p 8081:8081 \
+              ghcr.io/flare19/go-url-shortener-redirector:latest
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl -sf https://urlshort-writer.duckdns.org/healthz && echo " writer OK"
+          curl -sf https://urlshort-redirector.duckdns.org/healthz && echo " redirector OK"
