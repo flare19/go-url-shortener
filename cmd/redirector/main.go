@@ -72,9 +72,9 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Use(httpmiddleware.CORS(config.CORSAllowedOrigin()))
-	router.HandleFunc("/{code}", redirectHandler(svc, statsBuffer)).Methods(http.MethodGet)
-	router.HandleFunc("/{code}/stats", statsHandler(svc)).Methods(http.MethodGet, http.MethodOptions)
 	router.HandleFunc("/healthz", healthHandler).Methods(http.MethodGet)
+	router.HandleFunc("/{code}/stats", statsHandler(svc)).Methods(http.MethodGet, http.MethodOptions)
+	router.HandleFunc("/{code}", redirectHandler(svc, statsBuffer)).Methods(http.MethodGet)
 
 	srv := &http.Server{
 		Addr:         cfg.listenAddr,
